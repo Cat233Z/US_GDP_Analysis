@@ -1,0 +1,383 @@
+---
+title: "Final Project"
+author: "Xinyi Zhu"
+date: "2025-06-26"
+format: pdf
+---
+
+# 1.Introduction
+
+In this project, I want to explore how population, GDP, and unemployment rate vary across U.S. states. I’m curious to see which states have large or small populations, which ones have stronger economies, and whether there’s any connection between unemployment and either population or GDP.
+
+Here are the three main questions I’ll focus on:
+
+1.  How does the population size vary across different U.S. states?
+
+2.  What are the differences in total GDP and per capita GDP among states?
+
+3.  Is there a relationship between unemployment rate and GDP or population?
+
+I think this is worth looking into because it can help show which states are doing better economically and give some insights into how population and jobs might be connected. It’s also a good way to practice working with real data and making clear visualizations.
+
+# 2.Background Information
+
+The U.S. economy varies widely by state. Some states have booming industries and large populations, while others are smaller or more rural. By looking at economic and population data, we can get a clearer picture of how these differences play out across the country.
+
+I’m using data from three Wikipedia pages. All of them give recent stats for U.S. states. I’m only using the 50 states and D.C. to avoid issues with territories that have older or missing data.
+
+The **GDP** data is from the Wikipedia page “List of U.S. states and territories by GDP”:\
+<https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_GDP>\
+The original source is the Bureau of Economic Analysis (BEA):\
+“GDP by State”. U.S. Bureau of Economic Analysis. Retrieved April 10, 2022.\
+<https://www.bea.gov/data/gdp/gdp-state>
+
+The **population** data is from “List of U.S. states and territories by population”:\
+<https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_population>\
+The Wikipedia page references multiple sources from the U.S. Census Bureau, including:\
+“Annual and cumulative estimates of residential population change for the United States, regions, states, District of Columbia, Puerto Rico”. U.S. Census Bureau. Retrieved December 20, 2024.\
+<https://www.census.gov>\
+Also includes historical census tables and population estimates from various years.
+
+The **unemployment rate** data is from “List of U.S. states and territories by unemployment rate”:\
+<https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_unemployment_rate>\
+The original source is the Bureau of Labor Statistics (BLS):\
+“Local Area Unemployment Statistics”. Bureau of Labor Statistics. Retrieved June 2023.\
+<https://www.bls.gov/lau/>
+
+Each dataset is a table where rows are states and columns include things like GDP, population, or unemployment rate. I cleaned the data by filtering out the territories and keeping only states with recent and complete data.
+
+Next, I will organize and visualize these data to examine how the economic size, population, and unemployment rate vary across different states. This will help us understand the economic differences among states and uncover some interesting patterns.
+
+# 3.Data Summary
+
+I used R to pull the data directly from Wikipedia using the `rvest` package. I had to clean up each dataset before merging.
+
+For the GDP data, things were pretty clean. I only needed to remove the first row (which is a duplicate header) and the last row (which is the U.S. total). That left me with just the 50 states plus D.C., which is what I wanted.
+
+The population and unemployment datasets had more rows that included territories and other info I didn’t need. So I decided to use the list of states from the GDP dataset as my base and then joined the other two datasets to it.
+
+In the end, I got a nice clean dataset with each state’s GDP, per capita GDP, population, and unemployment rate.
+
+You can see the full code I used in the code appendix.
+
+# 4.Exploratory Data Analysis
+
+## Summary Statistics Table
+
+See @tbl-summary-stats for an overview of the combined data.
+
+```{r, message=FALSE, warning=FALSE}
+#| label: tbl-summary-stats
+#| tbl-cap: "Summary statistics for population, GDP, GDP per capita, and unemployment rate"
+#| echo: FALSE
+library(tidyverse)
+library(rvest)
+library(dplyr)
+
+# GDP data
+gdp_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_GDP"
+gdp_table <- gdp_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+gdp_data <- gdp_table[[1]] 
+gdp_clean <- gdp_data %>%
+  select(State = 1, GDP = 3, GDP_per_capita = 8) %>%
+  slice(-1) %>%
+  slice(-52) %>%
+  mutate(
+    GDP = as.numeric(gsub(",", "", GDP)),
+    GDP_per_capita = as.numeric(gsub("[$,]", "", GDP_per_capita))
+  )
+
+# Population data
+pop_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_population"
+pop_tables <- pop_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+pop_data <- pop_tables[[1]]
+pop_clean <- pop_data %>%
+  select(State = 1, Population = 2)%>%
+  mutate(Population = as.numeric(gsub(",", "", Population)))
+
+# Unemployment data
+unemp_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_unemployment_rate"
+unemp_tables <- unemp_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+unemp_data <- unemp_tables[[1]]
+unemp_clean <- unemp_data %>%
+  select(State = 2,Seasonally_adjusted_rates = 3)%>%
+  mutate(Seasonally_adjusted_rates = as.numeric(gsub("%", "", Seasonally_adjusted_rates)))
+
+# Summary all three data sets
+sum_data <- gdp_clean %>%
+  left_join(pop_clean, by = "State") %>%
+  left_join(unemp_clean, by = "State")
+
+knitr::kable(sum_data)
+```
+
+This table shows the basic stats for the main data points, like population, GDP, and unemployment. It helps get a quick idea of the overall data and what to expect.
+
+## Table: Top 5 States by GDP
+
+As shown in @tbl-Top5-stats-GDP, the top five states by GDP are led by California.
+
+```{r}
+#| label: tbl-Top5-stats-GDP
+#| tbl-cap: "Top 5 States by GDP"
+#| echo: FALSE
+sum_data %>%
+  arrange(desc(GDP)) %>%
+  slice_head(n = 5) %>%
+  select(State, GDP) %>%
+  knitr::kable()
+```
+
+## Table: Summary Statistics of GDP and GDP per Capita Across U.S. States
+
+As shown in @tbl-summary-statsGDP & @tbl-summary-statsGDP_per_capita, the summary statistics for GDP and GDP per capita across U.S. states reveal notable differences. The maximum GDP is heavily influenced by states like California and Texas, while GDP per capita varies significantly among states, indicating economic disparities.
+
+```{r}
+#| label: tbl-summary-statsGDP
+#| tbl-cap: "Summary Statistics of GDP Across U.S. States"
+#| echo: FALSE
+summary_stats1 <- sum_data %>%
+  summarise(
+    Min_GDP = min(GDP, na.rm = TRUE),
+    Max_GDP = max(GDP, na.rm = TRUE),
+    Avg_GDP = mean(GDP, na.rm = TRUE),
+    Median_GDP = median(GDP, na.rm = TRUE),
+  )
+
+knitr::kable(summary_stats1)
+```
+
+```{r}
+#| label: tbl-summary-statsGDP_per_capita
+#| tbl-cap: "Summary Statistics of GDP per Capita Across U.S. States"
+#| echo: FALSE
+summary_stats2 <- sum_data %>%
+  summarise(
+    Min_GDPperCapita = min(GDP_per_capita, na.rm = TRUE),
+    Max_GDPperCapita = max(GDP_per_capita, na.rm = TRUE),
+    Avg_GDPperCapita = mean(GDP_per_capita, na.rm = TRUE),
+    Median_GDPperCapita = median(GDP_per_capita, na.rm = TRUE)
+  )
+
+knitr::kable(summary_stats2)
+```
+
+## Data Visualizations
+
+### Visualization 1: Population vs State
+
+```{r}
+#| label: fig-population
+#| fig-cap: "Figure 1: Population size varies across U.S. states, with California and Texas the largest."
+#| fig-width: 8
+#| fig-height: 4
+#| echo: false
+sum_data %>%
+  ggplot(aes(x = State, y = Population)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "Population vs State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+As shown in @fig-population, the population size varies widely across states. This bar chart shows how the population varies across states. States like California and Texas clearly stand out with much larger populations compared to others. Knowing population size is important because it affects everything from the economy to resources.
+
+### Visualization 2: GDP vs State
+
+```{r}
+#| label: fig-gdp-total
+#| fig-cap: "Figure 2: Total GDP shows California and Texas leading the economy."
+#| fig-width: 8
+#| fig-height: 4
+#| echo: false
+sum_data %>%
+  ggplot(aes(x = State, y = GDP)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "GDP vs State", x = "State", y = "GDP") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+As shown in @fig-gdp-total, total GDP varies significantly across states. Big states like California, Texas, and New York clearly lead with much higher GDP compared to others. This highlights which states have the strongest economies overall.
+
+### Visualization 3: GDP per Capita vs State
+
+```{r}
+#| label: fig-gdp-percapita
+#| fig-cap: "Figure 3: GDP per capita shows smaller states can have high average wealth."
+#| fig-width: 8
+#| fig-height: 4
+#| echo: false
+sum_data %>%
+  ggplot(aes(x = State, y = GDP_per_capita)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "GDP per Capita vs State", x = "State", y = "GDP") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+As shown in @fig-gdp-percapita, GDP per capita reveals that some smaller states have high average wealth. This means that while their total GDP might be smaller, people there tend to be wealthier on average. It’s a useful way to understand economic well-being beyond just total GDP.
+
+### Visualization 4: Unemployment Rate vs GDP
+
+```{r}
+#| label: fig-unemp-vs-gdp
+#| fig-cap: "Figure 4: Scatter plot shows a general trend of lower unemployment in states with higher GDP."
+#| fig-width: 8
+#| fig-height: 4
+#| echo: false
+sum_data %>%
+  ggplot(aes(x = GDP, y = Seasonally_adjusted_rates)) +
+  geom_point(color = "skyblue", size = 2) +
+  labs(title = "Unemployment Rate vs GDP", x = "GDP", y = "Unemployment Rate") +
+  theme_minimal()
+```
+
+As shown in @fig-unemp-vs-gdp, the scatter plot illustrates a general trend where states with higher GDP tend to have lower unemployment rates. This suggests that stronger economies usually correspond with more job opportunities. However, it’s not a perfect correlation, as other factors also influence unemployment. This visualization helps us understand the relationship between economic size and the job market.
+
+# 5.Conclusion
+
+Here’s what I found from the data:
+
+-   **Some states have way more people than others.** California and Texas are the biggest. States like Wyoming and Vermont have much smaller populations.
+
+-   **Big states also have higher total GDP.** California, Texas, and New York lead here — not surprising, since they have more people and business.
+
+-   **GDP per person tells a different story.** States like Delaware and Alaska have fewer people but still high GDP per person. So small states can still be rich.
+
+-   **Unemployment doesn’t fully follow GDP.** States with more GDP tend to have lower unemployment, but not always. Other stuff matters too.
+
+So overall, population, total GDP, and GDP per person all show different things. Big states make more money overall, but smaller ones can still be strong when you look at GDP per person.
+
+Unemployment is a bit more random — higher GDP doesn’t always mean more jobs. There’s probably more going on, like different industries or job types.
+
+If I had more time, I’d look at things like spending, jobs by sector, or education levels. That would give an even better picture.
+
+# 6.References
+
+Here are the data sources I used:
+
+-   Wikipedia contributors. *List of U.S. states and territories by GDP.* Wikipedia.\
+    <https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_GDP>\
+    (Original source: U.S. Bureau of Economic Analysis, "GDP by State")
+
+-   Wikipedia contributors. *List of U.S. states and territories by population.* Wikipedia.\
+    <https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_population>\
+    (Original source: U.S. Census Bureau)
+
+-   Wikipedia contributors. *List of U.S. states and territories by unemployment rate.* Wikipedia.\
+    <https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_unemployment_rate>\
+    (Original source: U.S. Bureau of Labor Statistics)
+
+# 7.Code Appendix
+
+```{r,echo=TRUE, eval=FALSE}
+# Style Guide: Using Tidyverse Style Guide https://style.tidyverse.org/
+
+library(tidyverse)
+library(rvest)
+library(knitr)
+
+# GDP data
+gdp_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_GDP"
+gdp_table <- gdp_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+gdp_data <- gdp_table[[1]] 
+gdp_clean <- gdp_data %>%
+  select(State = 1, GDP = 3, GDP_per_capita = 8) %>%
+  slice(-1) %>%
+  slice(-52) %>%
+  mutate(
+    GDP = as.numeric(gsub(",", "", GDP)),
+    GDP_per_capita = as.numeric(gsub("[$,]", "", GDP_per_capita))
+  )
+
+# Population data
+pop_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_population"
+pop_tables <- pop_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+pop_data <- pop_tables[[1]]
+pop_clean <- pop_data %>%
+  select(State = 1, Population = 2)%>%
+  mutate(Population = as.numeric(gsub(",", "", Population)))
+
+# Unemployment data
+unemp_url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_unemployment_rate"
+unemp_tables <- unemp_url %>%
+  read_html() %>%
+  html_nodes("table") %>%
+  html_table(fill = TRUE)
+unemp_data <- unemp_tables[[1]]
+unemp_clean <- unemp_data %>%
+  select(State = 2,Seasonally_adjusted_rates = 3)%>%
+  mutate(Seasonally_adjusted_rates = as.numeric(gsub("%", "", Seasonally_adjusted_rates)))
+
+# Summary all three data sets
+sum_data <- gdp_clean %>%
+  left_join(pop_clean, by = "State") %>%
+  left_join(unemp_clean, by = "State")
+
+# Top 5 States by GDP
+sum_data %>%
+  arrange(desc(GDP)) %>%
+  slice_head(n = 5) %>%
+  select(State, GDP)
+
+# Table: Summary Statistics of GDP and GDP per Capita Across U.S. States
+summary_stats1 <- sum_data %>%
+  summarise(
+    Min_GDP = min(GDP, na.rm = TRUE),
+    Max_GDP = max(GDP, na.rm = TRUE),
+    Avg_GDP = mean(GDP, na.rm = TRUE),
+    Median_GDP = median(GDP, na.rm = TRUE),
+  )
+summary_stats2 <- sum_data %>%
+  summarise(
+    Min_GDPperCapita = min(GDP_per_capita, na.rm = TRUE),
+    Max_GDPperCapita = max(GDP_per_capita, na.rm = TRUE),
+    Avg_GDPperCapita = mean(GDP_per_capita, na.rm = TRUE),
+    Median_GDPperCapita = median(GDP_per_capita, na.rm = TRUE)
+  )
+
+# Visualization 1: Population vs State
+sum_data %>%
+  ggplot(aes(x = State, y = Population)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "Population vs State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Visualization 2: GDP vs State
+sum_data %>%
+  ggplot(aes(x = State, y = GDP)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "GDP vs State", x = "State", y = "GDP") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Visualization 3: GDP per Capita vs State
+sum_data %>%
+  ggplot(aes(x = State, y = GDP_per_capita)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "GDP per Capita vs State", x = "State", y = "GDP") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Visualization 4: Unemployment Rate vs GDP
+sum_data %>%
+  ggplot(aes(x = GDP, y = Seasonally_adjusted_rates)) +
+  geom_point(color = "skyblue", size = 2) +
+  labs(title = "Unemployment Rate vs GDP", x = "GDP", y = "Unemployment Rate") +
+  theme_minimal()
+
+write.csv(gdp_clean, "gdp_clean.csv", row.names = FALSE)
+write.csv(pop_clean, "pop_clean.csv", row.names = FALSE)
+write.csv(unemp_clean, "unemp_clean.csv", row.names = FALSE)
+```
